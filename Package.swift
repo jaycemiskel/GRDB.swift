@@ -1,4 +1,8 @@
 // swift-tools-version:5.7
+// Divergence from SH-018 Option D: upstream v6.29.3 still hardcodes `import CSQLite`
+// under `SWIFT_PACKAGE`, so this fork keeps a `CSQLite` target name but swaps the
+// system-library target for a thin Clang shim over `Support/SQLCipher_config.h`.
+// This is the v6.29.3-equivalent of the scaffold's later `GRDBSQLite` -> SQLCipher bridge.
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import Foundation
@@ -30,6 +34,12 @@ if ProcessInfo.processInfo.environment["SPI_BUILDER"] == "1" {
     dependencies.append(.package(url: "https://github.com/apple/swift-docc-plugin", from: "1.0.0"))
 }
 
+dependencies.append(.package(url: "https://github.com/sqlcipher/SQLCipher.swift", from: "4.14.0"))
+cSettings.append(.define("SQLITE_HAS_CODEC"))
+swiftSettings.append(.define("SQLITE_HAS_CODEC"))
+swiftSettings.append(.define("SQLCipher"))
+swiftSettings.append(.define("GRDBCIPHER"))
+
 let package = Package(
     name: "GRDB",
     defaultLocalization: "en", // for tests
@@ -40,15 +50,19 @@ let package = Package(
         .watchOS(.v4),
     ],
     products: [
-        .library(name: "CSQLite", targets: ["CSQLite"]),
         .library(name: "GRDB", targets: ["GRDB"]),
         .library(name: "GRDB-dynamic", type: .dynamic, targets: ["GRDB"]),
     ],
     dependencies: dependencies,
     targets: [
-        .systemLibrary(
+        .target(
             name: "CSQLite",
-            providers: [.apt(["libsqlite3-dev"])]),
+            dependencies: [
+                .product(name: "SQLCipher", package: "SQLCipher.swift"),
+            ],
+            path: "Support",
+            publicHeadersPath: ".",
+            cSettings: cSettings),
         .target(
             name: "GRDB",
             dependencies: ["CSQLite"],
